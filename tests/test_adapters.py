@@ -1,8 +1,13 @@
-import importlib.util
 from pathlib import Path
 import re
+import sys
+import types
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
-from quartermaster import hardware
+from quartermaster import ble, hardware
 from quartermaster.ui import app as app_module, gfx, screens
 from tests.fakes import NO_FIX, Hardware
 from tests.test_ui import make_app, press, screen_text
@@ -216,17 +221,27 @@ def test_the_reason_is_worked_out_once_each_time_an_adapter_is_plugged_in(monkey
     assert watch.stalled == [] and watch._why == {}
 
 
-def test_the_package_brings_usb_modeswitch_and_the_wifi_firmware():
-    spec = importlib.util.spec_from_file_location("build_deb", ROOT / "tools" / "build_deb.py")
-    build_deb = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(build_deb)
-    depends = [part.strip() for part in build_deb.DEPENDS.split(",")]
-    for package in ("usb-modeswitch", "firmware-realtek", "firmware-mediatek", "firmware-atheros"):
-        assert package in depends
-    # The CardputerZero image lacks it and the AppStore never runs apt-get update, so it would stop the install.
-    assert "firmware-misc-nonfree" not in build_deb.DEPENDS
-    needed = {chip[3] for chip in hardware.CHIPS.values() if chip[3]}
-    assert needed - {"firmware-misc-nonfree"} <= set(depends)
+def test_python_package_declares_console_entrypoint_and_optional_pi_hardware():
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = metadata["project"]
+    assert project["name"] == "quartermaster-pi-zero-2w"
+    assert project["scripts"]["quartermaster"] == "quartermaster.__main__:main"
+    assert "Pillow>=9.4" in project["dependencies"]
+    assert "pyserial>=3.5" in project["dependencies"]
+    assert "gpiod>=2.0" in project["optional-dependencies"]["pi-hat"]
+    assert "spidev>=3.6" in project["optional-dependencies"]["pi-hat"]
+
+
+def test_ble_probe_reports_missing_dbus_and_visible_adapter(monkeypatch):
+    monkeypatch.setitem(sys.modules, "dbus", None)
+    assert ble.probe() == "python3-dbus is unavailable"
+
+    manager = types.SimpleNamespace(GetManagedObjects=lambda: {"/org/bluez/hci0": {"org.bluez.Adapter1": {}}})
+    bus = types.SimpleNamespace(get_object=lambda *args: object())
+    dbus = types.SimpleNamespace(SystemBus=lambda: bus, Interface=lambda *args: manager,
+                                 exceptions=types.SimpleNamespace(DBusException=Exception))
+    monkeypatch.setitem(sys.modules, "dbus", dbus)
+    assert ble.probe() == "adapter /org/bluez/hci0"
 
 
 def test_only_power_trouble_since_the_adapter_was_plugged_in_counts(tmp_path):

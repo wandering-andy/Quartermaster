@@ -26,7 +26,7 @@ LOG_GLOB = "quartermaster_*.wigle.csv"
 JOURNAL_GLOB = ".quartermaster_*.wigle.csv.part"
 SYNC_SECONDS = 5.0
 DEVICE_TREE_MODEL = Path("/proc/device-tree/model")
-DISPLAY_SIZES = {"cardputer": "320x170", "st7735-128": "128x128", "st7789-240": "240x240"}
+DISPLAY_SIZES = {"cardputer": "320x170", "st7735-128": "128x128", "st7789-240": "240x240", "headless": "headless"}
 
 
 def pre_header(os_version="", *, display_profile="cardputer"):

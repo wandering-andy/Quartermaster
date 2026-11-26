@@ -25,6 +25,9 @@ from . import power
 SPI_DEVICE = Path("/dev/spidev0.1")
 MUX = Path("/sys/class/leds/ext_usb_gpio_fun/brightness")
 RESET, IRQ, BUSY = 26, 23, 22
+WAVESHARE_SPI_DEVICE = Path("/dev/spidev0.0")
+WAVESHARE_RESET, WAVESHARE_BUSY, WAVESHARE_IRQ = 18, 20, 16
+WAVESHARE_TXEN = 6
 EXPANDER = 0x43
 IRQ_MASK = 0x0262
 BANDWIDTHS = {62500: 0x03, 125000: 0x04, 250000: 0x05, 500000: 0x06}
@@ -154,11 +157,11 @@ def _antenna(bus, stack):
 class _GpioV1:
     """libgpiod 1.6 (Debian 12)."""
 
-    def __init__(self, gpiod, stack):
+    def __init__(self, gpiod, stack, pins=(RESET, BUSY, IRQ)):
         chip = gpiod.Chip("/dev/gpiochip0")
         stack.callback(chip.close)
         self.lines = {}
-        for pin in (BUSY, IRQ, RESET):
+        for pin in pins:
             line = chip.get_line(pin)
             line.request(consumer="quartermaster", type=gpiod.LINE_REQ_DIR_IN)
             stack.callback(line.release)
@@ -167,8 +170,11 @@ class _GpioV1:
     def active(self, pin):
         return bool(self.lines[pin].get_value())
 
-    def pulse_reset(self, stack):
-        reset = self.lines[RESET]
+    def output(self, pin, active):
+        self.lines[pin].set_direction_output(int(active))
+
+    def pulse_reset(self, stack, pins=(RESET, BUSY, IRQ)):
+        reset = self.lines[pins[0]]
         reset.set_direction_output(0)
         stack.callback(reset.set_direction_input)
         time.sleep(0.002)
@@ -178,45 +184,67 @@ class _GpioV1:
 class _GpioV2:
     """libgpiod 2 (Debian 13)."""
 
-    def __init__(self, gpiod, stack):
+    def __init__(self, gpiod, stack, pins=(RESET, BUSY, IRQ)):
         self.gpiod = gpiod
         self.inputs = gpiod.LineSettings(direction=gpiod.line.Direction.INPUT)
         self.lines = gpiod.request_lines("/dev/gpiochip0", consumer="quartermaster",
-                                         config={(RESET, BUSY, IRQ): self.inputs})
+                                         config={tuple(pins): self.inputs})
         stack.callback(self.lines.release)
 
     def active(self, pin):
         return self.lines.get_value(pin) == self.gpiod.line.Value.ACTIVE
 
-    def pulse_reset(self, stack):
+    def output(self, pin, active):
+        value = self.gpiod.line.Value.ACTIVE if active else self.gpiod.line.Value.INACTIVE
+        self.lines.reconfigure_lines({pin: self.gpiod.LineSettings(
+            direction=self.gpiod.line.Direction.OUTPUT, output_value=value)})
+
+    def pulse_reset(self, stack, pins=(RESET, BUSY, IRQ)):
         gpiod = self.gpiod
         self.lines.reconfigure_lines({
-            RESET: gpiod.LineSettings(direction=gpiod.line.Direction.OUTPUT, output_value=gpiod.line.Value.INACTIVE),
-            (BUSY, IRQ): self.inputs,
+            pins[0]: gpiod.LineSettings(direction=gpiod.line.Direction.OUTPUT,
+                                        output_value=gpiod.line.Value.INACTIVE),
+            tuple(pin for pin in pins if pin != pins[0]): self.inputs,
         })
-        stack.callback(self.lines.reconfigure_lines, {(RESET, BUSY, IRQ): self.inputs})
+        stack.callback(self.lines.reconfigure_lines, {tuple(pins): self.inputs})
         time.sleep(0.002)
-        self.lines.set_value(RESET, gpiod.line.Value.ACTIVE)
+        self.lines.set_value(pins[0], gpiod.line.Value.ACTIVE)
 
 
-def _modules():
+def _modules(antenna_switch=True):
     try:
         import gpiod
         import spidev
+    except ImportError:
+        raise RadioError(MISSING) from None
+    if antenna_switch:
         try:
             from smbus import SMBus
         except ImportError:
-            from smbus2 import SMBus
-    except ImportError:
-        raise RadioError(MISSING) from None
+            try:
+                from smbus2 import SMBus
+            except ImportError:
+                raise RadioError(MISSING) from None
+    else:
+        SMBus = None
     return gpiod, spidev, SMBus
 
 
 class CapRadio:
-    """The SX1262 in continuous receive. One thread uses it: the one that opened it."""
+    """An SX1262 receiver. One thread uses the radio: the one that opened it."""
 
-    def __init__(self, rails, supply=power.RAILS[0], spi=SPI_DEVICE, mux=MUX):
-        self.rails, self.supply, self.spi_path, self.mux = rails, Path(supply), Path(spi), Path(mux)
+    def __init__(self, rails, supply=power.RAILS[0], spi=SPI_DEVICE, mux=MUX, bus=0, chip_select=1,
+                 gpio_pins=(RESET, BUSY, IRQ), switched_power=True, antenna_switch=True, tcxo=True, txen=None,
+                 rx_gain=b"\x96"):
+        self.rails = rails
+        self.supply = Path(supply) if supply is not None else None
+        self.spi_path, self.mux = Path(spi), Path(mux) if mux is not None else None
+        self.bus, self.chip_select = bus, chip_select
+        self.gpio_pins = tuple(gpio_pins)
+        self.reset_pin, self.busy_pin, self.irq_pin = self.gpio_pins[:3]
+        self.switched_power, self.antenna_switch, self.tcxo = switched_power, antenna_switch, tcxo
+        self.txen = txen
+        self.rx_gain = bytes(rx_gain)
         self.profile = None
         self.counts = dict(received=0, crc_errors=0, header_errors=0)
         self._resources = None
@@ -226,12 +254,14 @@ class CapRadio:
         """Power the cap, wake the radio and check that it answers as an SX1262 in LoRa mode."""
         if self._resources is not None:
             return self
-        if not self.spi_path.exists() or not self.supply.is_file():
+        if not self.spi_path.exists() or self.switched_power and \
+                (self.supply is None or not self.supply.is_file() or self.rails is None):
             raise RadioError(ABSENT)
-        gpiod, spidev, SMBus = _modules()
+        gpiod, spidev, SMBus = _modules(self.antenna_switch)
         with ExitStack() as stack:
             try:
-                self._gpio = (_GpioV2 if hasattr(gpiod, "request_lines") else _GpioV1)(gpiod, stack)
+                self._gpio = (_GpioV2 if hasattr(gpiod, "request_lines") else _GpioV1)(gpiod, stack,
+                                                                                     self.gpio_pins)
             except PermissionError:
                 raise RadioError(DENIED) from None
             except OSError as exc:
@@ -239,40 +269,43 @@ class CapRadio:
             try:
                 spi = spidev.SpiDev()
                 stack.callback(spi.close)
-                spi.open(0, 1)
+                spi.open(self.bus, self.chip_select)
                 spi.mode = 0
                 spi.max_speed_hz = 1_000_000
             except PermissionError:
                 raise RadioError(DENIED) from None
             except OSError:
                 raise RadioError(ABSENT) from None
-            self.rails.on("lora", [self.supply])
-            stack.callback(self.rails.restore, "lora")
-            try:
-                if self.supply.read_text().strip() == "0":
-                    raise RadioError(DENIED)
-            except OSError:
-                raise RadioError(DENIED) from None
-            time.sleep(0.15)
-            try:
-                bus = SMBus(1)
-                stack.callback(bus.close)
-                _antenna(bus, stack)
-            except PermissionError:
-                raise RadioError(DENIED) from None
-            except OSError:
-                raise RadioError(ABSENT) from None
-            if self.mux.exists():
+            if self.switched_power:
+                self.rails.on("lora", [self.supply])
+                stack.callback(self.rails.restore, "lora")
+                try:
+                    if self.supply.read_text().strip() == "0":
+                        raise RadioError(DENIED)
+                except OSError:
+                    raise RadioError(DENIED) from None
+                time.sleep(0.15)
+            if self.antenna_switch:
+                try:
+                    bus = SMBus(1)
+                    stack.callback(bus.close)
+                    _antenna(bus, stack)
+                except PermissionError:
+                    raise RadioError(DENIED) from None
+                except OSError:
+                    raise RadioError(ABSENT) from None
+            if self.mux is not None and self.mux.exists():
                 try:
                     _set(self.mux, "0", stack)
                 except OSError:
                     raise RadioError(DENIED) from None
             self._spi = spi
             try:
-                self._gpio.pulse_reset(stack)
+                self._gpio.pulse_reset(stack, self.gpio_pins)
                 time.sleep(0.010)
                 self._command(0x80, b"\x00")
-                self._command(0x97, b"\x06\x00\x01\x40")
+                if self.tcxo:
+                    self._command(0x97, b"\x06\x00\x01\x40")
                 self._command(0x89, b"\x7f")
                 self._command(0x96, b"\x01")
                 self._command(0x8A, b"\x01")
@@ -292,7 +325,7 @@ class CapRadio:
         if opcode not in COMMANDS:
             raise RadioError("Unsupported radio operation")
         deadline = time.monotonic() + 0.5
-        while self._gpio.active(BUSY):
+        while self._gpio.active(self.busy_pin):
             if time.monotonic() >= deadline:
                 raise RadioError(ABSENT)
             time.sleep(0.001)
@@ -326,13 +359,15 @@ class CapRadio:
         self._write_register(0x0740, sync)
         if self._read_register(0x0740, 2) != sync:
             raise RadioError(ABSENT)
-        self._write_register(0x08AC, b"\x96")
+        self._write_register(0x08AC, self.rx_gain)
         self._write_register(0x0736, bytes([self._read_register(0x0736)[0] | 0x04]))
         self._write_register(0x08D8, bytes([self._read_register(0x08D8)[0] | 0x1E]))
         self.profile = profile
         self._command(0x8C, struct.pack(">HBBBB", profile.preamble_symbols, 0, 255, 1, 0))
         self._command(0x08, struct.pack(">HHHH", IRQ_MASK, IRQ_MASK, 0, 0))
         self._command(0x02, b"\xff\xff")
+        if self.txen is not None:
+            self._gpio.output(self.txen, True)
         self._command(0x82, b"\xff\xff\xff")
 
     def receive(self, timeout=0.25, wait=None):
@@ -342,7 +377,7 @@ class CapRadio:
             raise RadioError("closed")
         wait = wait or time.sleep
         deadline = time.monotonic() + timeout
-        while not self._gpio.active(IRQ):
+        while not self._gpio.active(self.irq_pin):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return None
@@ -368,6 +403,37 @@ class CapRadio:
         resources, self._resources = self._resources, None
         if resources is not None:
             resources.close()
+
+
+class WaveshareRadio(CapRadio):
+    """Waveshare SX1262 XXXM HAT receiver on Pi SPI0 CE0 and its documented BCM GPIO lines."""
+
+    def __init__(self, spi=WAVESHARE_SPI_DEVICE):
+        super().__init__(None, None, spi, None, bus=0, chip_select=0,
+                 gpio_pins=(WAVESHARE_RESET, WAVESHARE_BUSY, WAVESHARE_IRQ, WAVESHARE_TXEN),
+                         switched_power=False, antenna_switch=False, tcxo=False, txen=WAVESHARE_TXEN,
+                         rx_gain=b"\x94")
+
+
+class WaveshareHat:
+    """Optional HAT presence state and radio factory for the shared mesh Listener interface."""
+
+    def __init__(self, spi=WAVESHARE_SPI_DEVICE, radio=WaveshareRadio):
+        self.spi, self.radio_class = Path(spi), radio
+        self.state = CHECKING
+
+    @property
+    def found(self):
+        return self.state == FOUND
+
+    def start(self, wanted=True):
+        if not wanted:
+            self.state = OFF
+        else:
+            self.state = FOUND if self.spi.exists() else ABSENT
+
+    def radio(self):
+        return self.radio_class(spi=self.spi)
 
 
 WORDS = {CHECKING: "Looking for it", ABSENT: "Not found. Plug it in, then switch on.",

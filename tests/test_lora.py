@@ -189,6 +189,74 @@ def test_the_radio_is_powered_for_lora_and_the_gps_never_cuts_that_power(monkeyp
         radio.receive(0)
 
 
+def test_waveshare_hat_uses_spi0_ce0_and_documented_bcm_gpio(monkeypatch, tmp_path):
+    device = tmp_path / "spidev0.0"
+    device.write_text("")
+    requests, opened, closed, outputs = [], [], [], []
+
+    class Lines:
+        def get_value(self, pin):
+            assert pin in next(iter(requests[-1][2]))
+            return "INACTIVE"
+
+        def reconfigure_lines(self, config):
+            outputs.append(config)
+
+        def set_value(self, pin, value):
+            pass
+
+        def release(self):
+            closed.append("gpio")
+
+    gpiod = types.SimpleNamespace(
+        request_lines=lambda path, consumer, config: requests.append((path, consumer, config)) or Lines(),
+        LineSettings=lambda **values: values,
+        line=types.SimpleNamespace(Direction=types.SimpleNamespace(INPUT="in", OUTPUT="out"),
+                                   Value=types.SimpleNamespace(ACTIVE="ACTIVE", INACTIVE="INACTIVE")))
+
+    class Spi:
+        mode = max_speed_hz = None
+
+        def __init__(self):
+            self.registers = {}
+
+        def open(self, bus, chip_select):
+            opened.append((bus, chip_select))
+
+        def xfer2(self, data):
+            result = [0] * len(data)
+            if data[0] == 0x0D:
+                address = int.from_bytes(bytes(data[1:3]), "big")
+                self.registers[address] = bytes(data[3:])
+            elif data[0] == 0x1D:
+                address = int.from_bytes(bytes(data[1:3]), "big")
+                result[4:] = self.registers.get(address, bytes(len(data) - 4))
+            elif data[0] == 0x11:
+                result[2] = 1
+            return result
+
+        def close(self):
+            closed.append("spi")
+
+    def modules(antenna_switch):
+        assert antenna_switch is False
+        return gpiod, types.SimpleNamespace(SpiDev=Spi), None
+
+    monkeypatch.setattr(lora, "_modules", modules)
+    monkeypatch.setattr(lora.time, "sleep", lambda seconds: None)
+    radio = lora.WaveshareRadio(device)
+    assert radio.open(US[0]) is radio
+    assert opened == [(0, 0)]
+    assert list(requests[0][2]) == [(18, 20, 16, 6)]
+    assert (lora.WAVESHARE_RESET, lora.WAVESHARE_BUSY, lora.WAVESHARE_IRQ) == (18, 20, 16)
+    assert lora.WAVESHARE_TXEN == 6
+    assert any(config.get(6, {}).get("output_value") == "ACTIVE" for config in outputs)
+    assert radio._spi.registers[0x08AC] == b"\x94"
+    assert radio.receive(0) is None
+    radio.close()
+    assert closed == ["spi", "gpio"]
+
+
 def test_a_supply_the_gps_switched_on_stays_on_while_the_radio_uses_it(monkeypatch, tmp_path):
     chip = Chip(monkeypatch, tmp_path)
     chip.rails.on("gps")

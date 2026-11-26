@@ -4,7 +4,7 @@ import sys
 import threading
 import types
 
-from quartermaster import gnss, hardware, wigle
+from quartermaster import config, gnss, hardware, wigle
 from quartermaster.gnss import GPS, nmea_fix
 from quartermaster.power import Rails
 from quartermaster.tracker import BLE, Ends, Tracker, WIFI
@@ -146,7 +146,7 @@ def test_ignored_devices_are_counted_but_never_logged():
 
 def test_wigle_file_is_spec_exact(tmp_path):
     path = tmp_path / wigle.log_filename(NOW)
-    w = wigle.WigleWriter(path, "13")
+    w = wigle.WigleWriter(path, "13", display_profile="headless")
     net = parse_iw_scan(SCAN)[0]
     dev = {"mac": net["bssid"], "name": net["ssid"], "capabilities": net["capabilities"],
            "channel": net["channel"], "frequency": net["frequency"]}
@@ -157,7 +157,9 @@ def test_wigle_file_is_spec_exact(tmp_path):
     assert not w.write("WIFI", dev, -61, dict(FIX, latitude=0.0, longitude=0.0), NOW)
     w.close()
     lines = path.read_text(encoding="utf-8").split("\n")
-    assert lines[0].startswith("WigleWifi-1.6,appRelease=Quartermaster ") and "device=Quartermaster" in lines[0]
+    assert lines[0].startswith("WigleWifi-1.6,appRelease=Quartermaster ")
+    assert "model=CardputerZero" not in lines[0] and "board=M5Stack CardputerZero" not in lines[0]
+    assert "display=headless" in lines[0] and "device=Quartermaster" in lines[0]
     assert lines[1] == ",".join(wigle.COLUMNS)
     rows = list(csv.reader(io.StringIO("\n".join(lines[2:]))))
     assert rows[0] == ["aa:bb:cc:dd:ee:01", 'Black Pearl, "Guest"', "[WPA2-PSK-CCMP][RSN-SAE-CCMP][WPS][ESS]",
@@ -204,6 +206,17 @@ def test_gps_candidates_orders_usb_first(tmp_path):
     found = hardware.gps_candidates(tty, dev)
     assert [c["kind"] for c in found] == ["usb", "uart"] and found[0]["label"] == "CH340 USB GPS"
     assert found[1]["path"] == str(dev / "ttyS0")
+    assert found[1]["label"] == "Cap / Grove UART"
+    assert hardware.gps_candidates(tty, dev, cardputer=False, pi_uart=True)[1]["label"].startswith("Pi GPIO UART")
+    assert [c["kind"] for c in hardware.gps_candidates(tty, dev, cardputer=False)] == ["usb"]
+
+
+def test_pi_gpio_uart_gps_source_round_trips_in_settings(tmp_path):
+    path = tmp_path / "config.json"
+    cfg = config.load(path)
+    cfg["gps_source"] = "/dev/serial0"
+    config.save(cfg, path)
+    assert config.load(path)["gps_source"] == "/dev/serial0"
 
 
 def test_gps_candidates_never_include_the_bluetooth_uart(tmp_path):

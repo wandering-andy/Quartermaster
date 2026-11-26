@@ -101,3 +101,19 @@ class BleScanner:
                 pass
         self.started = False
         self.bus = self.adapter = None
+
+
+def probe():
+    """Check D-Bus, BlueZ, and adapter visibility without powering or scanning an adapter."""
+    try:
+        import dbus
+    except ImportError:
+        return "python3-dbus is unavailable"
+    try:
+        bus = dbus.SystemBus()
+        manager = dbus.Interface(bus.get_object("org.bluez", "/"), "org.freedesktop.DBus.ObjectManager")
+        objects = manager.GetManagedObjects()
+    except dbus.exceptions.DBusException as exc:
+        return "BlueZ unavailable (%s)" % (exc.get_dbus_name().rsplit(".", 1)[-1] or "D-Bus error")
+    adapter = next((path for path, interfaces in objects.items() if "org.bluez.Adapter1" in interfaces), None)
+    return "adapter %s" % adapter if adapter else "no Bluetooth adapter found"

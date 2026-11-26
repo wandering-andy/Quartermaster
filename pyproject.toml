@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quartermaster-pi-zero-2w"
+dynamic = ["version"]
+description = "Headless Linux wardriving and compatible logging for Raspberry Pi Zero 2 W"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "GPL-3.0-only"
+dependencies = [
+  "Pillow>=9.4",
+  "pyserial>=3.5",
+]
+classifiers = [
+  "Environment :: Console",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Hardware",
+]
+
+[project.optional-dependencies]
+performance = ["numpy>=1.24"]
+pi-hat = ["gpiod>=2.0", "spidev>=3.6"]
+test = ["pytest", "pyflakes", "tomli>=1.1; python_version < '3.11'"]
+
+[project.scripts]
+quartermaster = "quartermaster.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "quartermaster.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["quartermaster*"]
+
+[tool.setuptools.package-data]
+quartermaster = ["assets/*", "assets/**/*", "assets/**/**/*"]

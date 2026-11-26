@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install test dependencies
-        run: python -m pip install ${{ matrix.packages }} pyserial pyyaml pytest pyflakes
+        run: python -m pip install ${{ matrix.packages }} pyserial pyyaml pytest pyflakes build
       - name: Lint
         run: python -m pyflakes quartermaster tests tools
       - name: Load the CardputerZero AppStore install policy
@@ -47,6 +47,12 @@ jobs:
         run: python tools/render_screens.py --out build/screenshots
       - name: Build the Raspberry Pi package
         run: python tools/build_deb.py --target pi --out build
+      - name: Build and install the wheel
+        run: |
+          python -m build --wheel --outdir build/dist
+          python -m pip install --no-deps build/dist/*.whl
+          cd /tmp
+          quartermaster --version
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: matrix.python == '3.13'
         with:

@@ -1,0 +1,16 @@
+[Unit]
+Description=Quartermaster headless wardrive
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/opt/quartermaster/venv/bin/quartermaster --dashboard
+KillSignal=SIGINT
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

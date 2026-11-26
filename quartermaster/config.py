@@ -85,7 +85,8 @@ SECTIONS = [
     ]),
     ("GPS", [
         ("gps_source", "GPS source", [("auto", "Auto"), ("gpsd", "gpsd"), ("/dev/ttyUSB0", "USB (ttyUSB0)"),
-                                      ("/dev/ttyACM0", "USB (ttyACM0)"), ("/dev/ttyS0", "Cap / Grove"),
+                                      ("/dev/ttyACM0", "USB (ttyACM0)"), ("/dev/serial0", "Pi GPIO UART"),
+                                      ("/dev/ttyS0", "Cap / Grove"),
                                       ("off", "Off")], "Auto finds a USB, Cap LoRa or Grove GPS by itself."),
         ("gps_max_hdop", "GPS accuracy needed", [(0, "Any fix"), (10, "Fair"), (5, "Good"), (2, "Best")],
          "Rows wait until the fix is at least this good."),
