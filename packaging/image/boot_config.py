@@ -4,9 +4,11 @@ import os
 import re
 import sys
 
-PROFILES = ("st7735-128", "st7789-240")
+IMAGE_PROFILES = ("st7735-128", "st7789-240")
+PROFILES = IMAGE_PROFILES + ("st7789-320x240",)
 ALIASES = {"1.44": "st7735-128", "1.44in": "st7735-128", "128": "st7735-128",
-           "1.3": "st7789-240", "1.3in": "st7789-240", "240": "st7789-240"}
+           "1.3": "st7789-240", "1.3in": "st7789-240", "240": "st7789-240",
+           "2": "st7789-320x240", "2in": "st7789-320x240", "320": "st7789-320x240"}
 BOOT_FILE = "/boot/firmware/quartermaster.txt"
 DISPLAY_FILE = "/etc/quartermaster/display"
 AUTOSTART_FILE = "/etc/quartermaster/autostart"

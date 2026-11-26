@@ -354,6 +354,7 @@ check "app import as $service_user" "$(in_chroot runuser -u "$service_user" -- /
     "$version"
 check "the screen and button modules load as $service_user" "$(in_chroot runuser -u "$service_user" -- python3 -c '
 import importlib.util
+from PIL import Image
 from spidev import SpiDev
 from luma.core.interface.serial import spi
 from luma.lcd.device import st7735, st7789

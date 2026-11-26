@@ -114,3 +114,30 @@ def test_hat_buttons_share_input_with_a_usb_keyboard(monkeypatch):
     keyboard.close.assert_called_once()
     for pin in pins.values():
         pin.close.assert_called_once()
+
+
+def test_the_two_inch_module_is_landscape_with_its_own_backlight_and_centres_the_wide_frame(panel_drivers):
+    gpio, bus, serial, small, large, hooks = panel_drivers
+    large.return_value.size = (320, 240)
+    display = hat.HatDisplay("st7789-320x240")
+    options = large.call_args.kwargs
+    assert (options["width"], options["height"], options["rotate"]) == (240, 320, 1)
+    assert options["gpio_LIGHT"] == 18
+    assert [serial.call_args.kwargs[k] for k in ("gpio_DC", "gpio_RST")] == [25, 27]
+    assert (display.width, display.height) == (320, 240)
+    display.show(Image.new("RGB", (320, 170), "red"))
+    shown = large.return_value.display.call_args.args[0]
+    assert shown.size == (320, 240) and shown.getpixel((0, 0)) == (0, 0, 0)
+    assert shown.getpixel((160, 120)) == (255, 0, 0) and shown.getpixel((160, 239)) == (0, 0, 0)
+    gpio.cleanup.assert_not_called()
+    display.close()
+    gpio.cleanup.assert_called_once_with([25, 27, 18])
+
+
+def test_the_buttonless_module_opens_no_gpio_buttons_and_keeps_the_keyboard(monkeypatch):
+    monkeypatch.setitem(sys.modules, "gpiozero", SimpleNamespace(Button=lambda *a, **k: pytest.fail("no buttons")))
+    keyboard = Mock()
+    monkeypatch.setattr(hat, "EvdevInput", lambda: keyboard)
+    inputs = hat.HatInput(buttons=False)
+    inputs.close()
+    keyboard.close.assert_called_once()

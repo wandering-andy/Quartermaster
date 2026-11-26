@@ -119,13 +119,13 @@ def test_an_autostart_line_never_changes_the_display_choice():
     assert boot_config.parse("autostart=wardrive\n") is None
 
 
-@pytest.mark.parametrize("profile", boot_config.PROFILES)
+@pytest.mark.parametrize("profile", boot_config.IMAGE_PROFILES)
 def test_the_boot_partition_template_selects_its_hat(profile):
     template = (IMAGE / "quartermaster.txt").read_text()
     assert template.count("@HAT@") == 1
     text = template.replace("@HAT@", profile)
     assert boot_config.parse(text) == profile
-    for other in boot_config.PROFILES:
+    for other in boot_config.IMAGE_PROFILES:
         assert other in text
     lines = text.splitlines()
     assert lines[-1] == "display=" + profile and all(line.startswith("#") for line in lines[:-1])
@@ -902,7 +902,7 @@ def test_the_imager_list_refuses_duplicates_and_writes_json(tmp_path, capsys):
     with pytest.raises(ValueError, match="no image"):
         imager_os_list.os_list([], "o/r", "pi-v1.2.8")
     paths = []
-    for hat in boot_config.PROFILES:
+    for hat in boot_config.IMAGE_PROFILES:
         paths.append(tmp_path / (hat + ".json"))
         paths[-1].write_text(json.dumps(meta(hat)))
     assert imager_os_list.main(["--repo", "o/r", "--tag", "pi-v1.2.8", *map(str, paths)]) == 0
@@ -916,7 +916,7 @@ def test_the_imager_list_refuses_duplicates_and_writes_json(tmp_path, capsys):
 
 
 def test_each_image_is_named_after_its_waveshare_hat(tmp_path, capsys):
-    names = [imager_os_list.image_name(hat, "1.2.9") for hat in boot_config.PROFILES]
+    names = [imager_os_list.image_name(hat, "1.2.9") for hat in boot_config.IMAGE_PROFILES]
     assert names == ["quartermaster-pi-1.2.9-waveshare-1.44inch-lcd-hat", "quartermaster-pi-1.2.9-waveshare-1.3inch-lcd-hat"]
     for hat, version in (("hdmi", "1.2.9"), ("st7735-128", ""), ("st7735-128", "1.2.9 x"), ("st7735-128", "../1")):
         with pytest.raises(ValueError):
@@ -937,7 +937,7 @@ def test_each_image_is_named_after_its_waveshare_hat(tmp_path, capsys):
     (tmp_path / "tools").symlink_to(ROOT / "tools")
     (tmp_path / "build" / "pi").mkdir(parents=True)
     (tmp_path / "build" / "pi" / "quartermaster-pi_9.9.9_all.deb").write_bytes(b"")
-    for hat in (*boot_config.PROFILES, "hdmi"):
+    for hat in (*boot_config.IMAGE_PROFILES, "hdmi"):
         found = tmp_path / ("env-" + hat)
         result = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", named], cwd=tmp_path,
                                 env={"PATH": os.environ["PATH"], "HAT": hat, "VERSION": "9.9.9", "GITHUB_ENV": str(found)},
@@ -1019,7 +1019,7 @@ def test_the_image_workflow_builds_both_hats_on_tags_monthly_and_on_request():
                                        "cancel-in-progress": False}
     image = workflow["jobs"]["image"]
     assert image["needs"] == "release" and image["runs-on"] == "ubuntu-24.04"
-    assert tuple(image["strategy"]["matrix"]["hat"]) == boot_config.PROFILES
+    assert tuple(image["strategy"]["matrix"]["hat"]) == boot_config.IMAGE_PROFILES
     steps = "\n".join(step.get("run", "") for step in image["steps"])
     assert 'sudo tools/build_image.sh --hat "$HAT" --deb "$DEB"' in steps
     assert "2147483648" in steps and "qemu-user-static" in steps
@@ -1129,7 +1129,7 @@ def test_no_image_is_published_before_it_started_in_an_emulated_pi():
     assert boot["needs"] == ["release", "image"] and "boot" in jobs["publish"]["needs"]
     assert boot["runs-on"] == "ubuntu-24.04" and 60 <= boot["timeout-minutes"] <= 150
     rows = boot["strategy"]["matrix"]["include"]
-    assert tuple(row["hat"] for row in rows) == boot_config.PROFILES
+    assert tuple(row["hat"] for row in rows) == boot_config.IMAGE_PROFILES
     assert sorted(row["options"] for row in rows) == ["", "--imager"]
     assert boot["env"]["HAT"] == "${{ matrix.hat }}" and boot["env"]["OPTIONS"] == "${{ matrix.options }}"
     steps = {step.get("name"): step.get("run", "") for step in boot["steps"]}
@@ -1217,7 +1217,7 @@ def test_a_pi_release_is_only_made_or_reused_for_the_commit_that_was_tested(
         assert notes.read_text() == pi_release_notes.notes("owner/repo", "pi-v9.9.9", head)
         assert "/%s/docs/screens/diy/240/aircraft.png' width='200'" % head in notes.read_text()
         assert "The images are added to this release shortly after it is published." in notes.read_text()
-        for hat in boot_config.PROFILES:
+        for hat in boot_config.IMAGE_PROFILES:
             assert "`%s.img.xz`" % imager_os_list.image_name(hat, "9.9.9") in notes.read_text(), hat
 
 

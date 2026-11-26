@@ -108,6 +108,10 @@ systemctl --user enable --now quartermaster.service
 
 This explicitly starts wardriving immediately and at subsequent logins. `systemctl --user stop quartermaster` sends SIGINT to finalize active logs; use `systemctl --user status quartermaster` to check state and `journalctl --user -u quartermaster -f` to view periodic dashboard snapshots. On Raspberry Pi OS, install `python3-dbus` from the OS package manager and create this venv with `python3 -m venv --system-site-packages ~/.local/opt/quartermaster/venv`, so the BLE scanner can import the system D-Bus binding. The unit is unprivileged: grant its user the required SPI, GPIO, Wi-Fi, Bluetooth, and serial-device access using the target OS's normal device groups or udev rules. Do not solve device access by running the service as root. User services normally start with login; enabling lingering is an optional administrator action if it must survive logout or start before login.
 
+### 2-inch ST7789 SPI module (240x320, no buttons)
+
+`quartermaster --display st7789-320x240` drives the Waveshare 2inch LCD Module in landscape. Wire it to SPI0: VCC to 3.3 V, GND, DIN to MOSI (pin 19), CLK to SCLK (pin 23), CS to CE0 (pin 24), DC to BCM 25 (pin 22), RST to BCM 27 (pin 13) and BL to BCM 18 (pin 12). It has no buttons, so no GPIO inputs are opened; a USB keyboard still works. The app's wide 320x170 layout is centred on the panel. The module uses SPI0 CE0 and BCM 18, so it cannot be combined with the Waveshare SX1262 HAT, which uses the same lines. On a ready image, set `display=st7789-320x240` in `quartermaster.txt`; combine it with `autostart=wardrive`.
+
 ### Autostart on an LCD build without buttons
 
 On a card made from a ready Pi image, or one using the `quartermaster-pi` package with the boot-config service, add a line `autostart=wardrive` to `quartermaster.txt` on the **bootfs** drive. At every boot the service creates `/etc/quartermaster/autostart`; the launcher then passes `--autostart`, and the LCD app starts the wardrive without a button press. Remove the line or set `autostart=off` to turn it off. It is off by default. The headless runner always starts collecting and needs no setting.

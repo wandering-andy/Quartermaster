@@ -13,7 +13,7 @@ import threading
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="quartermaster", description="Quartermaster wardriver")
-    parser.add_argument("--display", choices=("cardputer", "st7735-128", "st7789-240"), default=None,
+    parser.add_argument("--display", choices=("cardputer", "st7735-128", "st7789-240", "st7789-320x240"), default=None,
                         help="open the CardputerZero framebuffer or a Waveshare LCD HAT with its controls; "
                              "without it, run the headless Linux collector")
     parser.add_argument("--autostart", action="store_true",
@@ -167,7 +167,7 @@ def main(argv=None):
                     from .ui.hat import HatDisplay, HatInput
                     display = HatDisplay(args.display)
                     cleanup.callback(display.close)
-                    keyboard = HatInput()
+                    keyboard = HatInput(buttons=False) if args.display == "st7789-320x240" else HatInput()
             cleanup.callback(keyboard.close)
         except (OSError, ImportError) as exc:
             print("Cannot open %s display or controls: %s" % (args.display, exc), file=sys.stderr)
