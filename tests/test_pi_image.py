@@ -96,6 +96,29 @@ def test_applying_the_boot_file_changes_the_display_only_for_a_valid_choice(tmp_
     assert not list(tmp_path.glob("*.new"))
 
 
+def test_autostart_is_off_until_the_boot_file_asks_for_it(tmp_path):
+    boot, marker = tmp_path / "quartermaster.txt", tmp_path / "autostart"
+    assert "no " in boot_config.apply_autostart(str(boot), str(marker)) and not marker.exists()
+    boot.write_text("display=st7789-240\n")
+    assert "stays off" in boot_config.apply_autostart(str(boot), str(marker)) and not marker.exists()
+    boot.write_text("display=st7789-240\nAutostart = Wardrive  # at boot\n")
+    assert boot_config.apply_autostart(str(boot), str(marker)) == "autostart is on"
+    assert marker.read_text() == "wardrive\n" and marker.stat().st_mode & 0o777 == 0o644
+    boot.write_text("autostart=maybe\n")
+    assert "keeping the current autostart" in boot_config.apply_autostart(str(boot), str(marker))
+    assert marker.exists()
+    boot.write_text("display=st7789-240\n")
+    assert "keeping autostart on" in boot_config.apply_autostart(str(boot), str(marker))
+    boot.write_text("autostart=off\n")
+    assert boot_config.apply_autostart(str(boot), str(marker)) == "autostart is off" and not marker.exists()
+    assert boot_config.apply_autostart(str(boot), str(marker)) == "autostart is off"
+
+
+def test_an_autostart_line_never_changes_the_display_choice():
+    assert boot_config.parse("autostart=wardrive\ndisplay=st7735-128\n") == "st7735-128"
+    assert boot_config.parse("autostart=wardrive\n") is None
+
+
 @pytest.mark.parametrize("profile", boot_config.PROFILES)
 def test_the_boot_partition_template_selects_its_hat(profile):
     template = (IMAGE / "quartermaster.txt").read_text()

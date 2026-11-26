@@ -16,6 +16,8 @@ def main(argv=None):
     parser.add_argument("--display", choices=("cardputer", "st7735-128", "st7789-240"), default=None,
                         help="open the CardputerZero framebuffer or a Waveshare LCD HAT with its controls; "
                              "without it, run the headless Linux collector")
+    parser.add_argument("--autostart", action="store_true",
+                        help="start the wardrive as soon as the LCD UI opens, without a button press")
     parser.add_argument("--no-splash", action="store_true", help="skip the boot animation")
     parser.add_argument("--probe", action="store_true", help="print the adapters and GPS ports found, then exit")
     parser.add_argument("--headless-wardrive", action="store_true", help=argparse.SUPPRESS)
@@ -183,6 +185,8 @@ def main(argv=None):
                   hw=HardwareWatch(gps_ports=gps_ports), cap=lora.Cap(rails, cardputer=cardputer),
                   updates=updates_check.check if cardputer else updates_check.check_pi)
         wigle.prune_empty(app.logs_dir)
+        if args.autostart:
+            app.start_wardrive(ask=False)
 
         def stop(*_):
             app.running = False

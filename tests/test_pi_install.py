@@ -26,8 +26,9 @@ def test_pi_probe_uses_usb_gps_without_probing_the_hat(profile, monkeypatch, cap
     assert capsys.readouterr().out.splitlines() == ["display  " + profile, "gps   /dev/ttyACM0  USB GPS"]
 
 
+@pytest.mark.parametrize("autostart", [False, True])
 @pytest.mark.parametrize("profile", ["st7735-128", "st7789-240"])
-def test_handheld_entry_opens_selected_hat_and_closes_it_on_exit(profile, monkeypatch, tmp_path):
+def test_handheld_entry_opens_selected_hat_and_closes_it_on_exit(profile, autostart, monkeypatch, tmp_path):
     from unittest.mock import Mock
     from quartermaster import config, engine
     from quartermaster.gnss import GPS
@@ -67,7 +68,11 @@ def test_handheld_entry_opens_selected_hat_and_closes_it_on_exit(profile, monkey
         return instance
 
     monkeypatch.setattr(app, "App", create)
-    assert __main__.main(["--display", profile, "--no-splash"]) == 0
+    assert __main__.main(["--display", profile, "--no-splash", *(["--autostart"] if autostart else [])]) == 0
+    if autostart:
+        seen[0].start_wardrive.assert_called_once_with(ask=False)
+    else:
+        seen[0].start_wardrive.assert_not_called()
     assert len(opened_from) == 1 and not opened_from[0].exists() and Path.cwd() == original_dir
     assert os.environ["LG_WD"] == "old-gpio-directory"
     seen[0].run.assert_called_once_with()
@@ -104,6 +109,7 @@ def test_pi_installer_contains_both_profiles_and_an_unprivileged_launcher(tmp_pa
     launcher = stage / "usr/bin/quartermaster"
     assert launcher.stat().st_mode & 0o111
     assert 'quartermaster --display "$display" "$@"' in launcher.read_text()
+    assert "[ -e /etc/quartermaster/autostart ]" in launcher.read_text()
     assert (stage / "etc/quartermaster/display").read_text().strip() == "st7735-128"
     assert (stage / "DEBIAN/conffiles").read_text().strip() == "/etc/quartermaster/display"
     assert (stage / "usr/lib/quartermaster/app/quartermaster/ui/hat.py").is_file()

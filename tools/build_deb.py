@@ -59,6 +59,7 @@ def pi_layout(stage):
     launcher = stage / "usr/bin/quartermaster"
     launcher.parent.mkdir(parents=True)
     launcher.write_text('#!/bin/sh\nset -e\nIFS= read -r display < /etc/quartermaster/display\n'
+                        'if [ -e /etc/quartermaster/autostart ]; then set -- --autostart "$@"; fi\n'
                         'cd /usr/lib/quartermaster/app\nexec /usr/bin/python3 -m quartermaster --display "$display" "$@"\n')
     launcher.chmod(0o755)
     profile = stage / "etc/quartermaster/display"

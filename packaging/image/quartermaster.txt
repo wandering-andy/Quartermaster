@@ -3,6 +3,8 @@
 #   1.44 inch HAT (128x128):  st7735-128
 #   1.3 inch HAT (240x240):   st7789-240
 #
+# To start the wardrive by itself when the Pi boots, add a line:  autostart=wardrive
+#
 # Put the name of your HAT after display= on the last line.
 # Then save this file and put the card back in the Pi.
 display=@HAT@

@@ -9,6 +9,9 @@ ALIASES = {"1.44": "st7735-128", "1.44in": "st7735-128", "128": "st7735-128",
            "1.3": "st7789-240", "1.3in": "st7789-240", "240": "st7789-240"}
 BOOT_FILE = "/boot/firmware/quartermaster.txt"
 DISPLAY_FILE = "/etc/quartermaster/display"
+AUTOSTART_FILE = "/etc/quartermaster/autostart"
+YES = ("wardrive", "yes", "on", "true", "1")
+NO = ("no", "off", "false", "0", "none", "")
 
 
 def parse(text):
@@ -59,8 +62,47 @@ def apply(boot_file=BOOT_FILE, display_file=DISPLAY_FILE):
     return "display changed from %s to %s" % (current or "none", profile)
 
 
+def parse_autostart(text):
+    """True or False for the last autostart=<value> line, None when there is none; ValueError for an unknown value."""
+    chosen = None
+    for raw in text.splitlines():
+        match = re.fullmatch(r"autostart\s*[=:]\s*(.*)", raw.split("#", 1)[0].strip().lower())
+        if match:
+            value = match.group(1).strip().strip("\"'").strip()
+            if value not in YES + NO:
+                raise ValueError("unknown autostart %r, expected wardrive or off" % value)
+            chosen = value in YES
+    return chosen
+
+
+def apply_autostart(boot_file=BOOT_FILE, autostart_file=AUTOSTART_FILE):
+    """Create or remove the marker file that makes the launcher start the wardrive; off when nothing says on."""
+    try:
+        with open(boot_file, "rb") as handle:
+            text = handle.read(65536).decode("utf-8-sig", "replace")
+        wanted = parse_autostart(text)
+    except FileNotFoundError:
+        return "no %s, keeping the current autostart" % boot_file
+    except ValueError as exc:
+        return "%s: %s, keeping the current autostart" % (boot_file, exc)
+    if wanted is None:
+        return "%s has no autostart line, autostart stays off" % boot_file if not os.path.exists(autostart_file) \
+            else "%s has no autostart line, keeping autostart on" % boot_file
+    if wanted:
+        with open(autostart_file, "w") as handle:
+            handle.write("wardrive\n")
+        os.chmod(autostart_file, 0o644)
+        return "autostart is on"
+    try:
+        os.unlink(autostart_file)
+    except FileNotFoundError:
+        pass
+    return "autostart is off"
+
+
 def main():
     print(apply())
+    print(apply_autostart())
     return 0
 
 
