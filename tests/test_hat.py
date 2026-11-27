@@ -193,3 +193,47 @@ def test_epaper_frame_is_the_panel_size_and_shows_the_counts():
     busy = epaper.render({"wifi": 1234, "ble": 56, "gps": {"valid": True, "hdop": 0.9}, "failed": "No adapter"})
     assert blank.size == busy.size == epaper.SIZE and blank.mode == "1"
     assert blank.tobytes() != busy.tobytes()
+
+
+class FakeOled:
+    def __init__(self):
+        self.calls = []
+
+    def contrast(self, level):
+        self.calls.append(("contrast", level))
+
+    def display(self, img):
+        self.calls.append(("display", img.tobytes()))
+
+    def hide(self):
+        self.calls.append(("hide",))
+
+
+def test_oled_throttles_shifts_every_minute_and_dims_when_nothing_changes():
+    from quartermaster.ui import oled
+
+    now = [0.0]
+    device = FakeOled()
+    panel = oled.OledDisplay(device, interval=1, shift_every=60, dim_after=300, clock=lambda: now[0])
+    status = {"state": "running", "wifi": 5}
+    assert panel.show(status) and not panel.show(status)  # second call is inside the interval
+    now[0] = 61
+    assert panel.show(status)
+    frames = [call[1] for call in device.calls if call[0] == "display"]
+    assert frames[0] != frames[1]  # the page drifted by a pixel
+    assert ("contrast", oled.DIM) not in device.calls
+    now[0] = 400
+    panel.show(status)
+    assert device.calls.count(("contrast", oled.DIM)) == 1
+    now[0] = 402
+    panel.show({"state": "running", "wifi": 6})  # a change wakes the panel
+    assert device.calls[-2] == ("contrast", oled.BRIGHT)
+    panel.close()
+    assert device.calls[-1] == ("hide",)
+
+
+def test_oled_frame_is_128x64_and_changes_with_the_counts():
+    from quartermaster.ui import oled
+
+    assert oled.render({}).size == oled.SIZE
+    assert oled.render({"wifi": 99}).tobytes() != oled.render({}).tobytes()

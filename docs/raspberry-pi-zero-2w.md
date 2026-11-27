@@ -118,6 +118,10 @@ This explicitly starts wardriving immediately and at subsequent logins. `systemc
 
 The panel uses SPI0 CE0 with DC on BCM 25, RST on BCM 17 and BUSY on BCM 24, none of which the SX1262 HAT uses, so the two stack. Install Waveshare's `waveshare_epd` Python library (from their e-Paper repository) and enable SPI. Updates are partial refreshes at most every 10 seconds and only when something changed, with a full refresh every 60 partial ones or hourly to clear ghosting. The panel is put to sleep when the collector stops. This is untested on real hardware.
 
+### 128x64 I2C OLED (SSD1309)
+
+`quartermaster --oled ssd1309` starts the headless collector in the background and shows the Wi-Fi, Bluetooth and row counts, GPS fix, LoRa state and any error on an I2C OLED at address 0x3C. Wire VCC to 3.3 V, GND, SDA to BCM 2 (pin 3) and SCL to BCM 3 (pin 5); the SX1262 HAT uses none of these. Set the board to I2C mode if it has the resistor jumpers, add `dtparam=i2c_arm=on` to the boot config, install `python3-luma.oled`, and check `i2cdetect -y 1` shows 0x3C. The page redraws once a second, drifts by a pixel every minute and dims after five minutes without a change, to limit burn-in. Use it instead of `--epaper`, not with it. This is untested on real hardware.
+
 ### Autostart on an LCD build without buttons
 
 On a card made from a ready Pi image, or one using the `quartermaster-pi` package with the boot-config service, add a line `autostart=wardrive` to `quartermaster.txt` on the **bootfs** drive. At every boot the service creates `/etc/quartermaster/autostart`; the launcher then passes `--autostart`, and the LCD app starts the wardrive without a button press. Remove the line or set `autostart=off` to turn it off. It is off by default. The headless runner always starts collecting and needs no setting.
