@@ -105,6 +105,15 @@ def apply_autostart(boot_file=BOOT_FILE, autostart_file=AUTOSTART_FILE):
 def main():
     print(apply())
     print(apply_autostart())
+    # python3 -I leaves this directory off sys.path
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        import boot_settings
+
+        for line in boot_settings.apply(BOOT_FILE):
+            print(line)
+    except Exception as exc:
+        print("quartermaster.txt settings were not applied: %s" % exc.__class__.__name__)
     return 0
 
 

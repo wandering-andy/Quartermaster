@@ -1550,3 +1550,72 @@ def test_the_diy_guide_says_a_new_pi_release_is_a_prerelease_until_it_is_tested(
     promoted = (WORKFLOWS / "promote-pi.yml").read_text()
     assert 'gh release create "$TAG" "${tag_option[@]}" --prerelease --latest=false' in created
     assert "--prerelease=false --latest=false" in promoted
+
+
+boot_settings = load_image_module("boot_settings")
+
+
+def test_boot_settings_parse_keeps_secrets_exactly_and_ignores_comments_and_legacy_lines():
+    found = boot_settings.parse(
+        "# country=XX\ncountry = us  # where\nwifi_password = 'pa#ss word'\nwigle_token=abc#def\n"
+        "1.44 inch HAT (128x128):  st7735-128\nst7789-240\nlora: off\n")
+    assert found == {"country": "us", "wifi_password": "pa#ss word", "wigle_token": "abc#def", "lora": "off"}
+
+
+def test_boot_settings_hand_the_app_only_valid_looking_settings_and_keep_the_file_private(tmp_path):
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    pairs = boot_settings.parse("country=US\nlora=\nble=off\nstatus_screen=oled\nwigle_name=AID1\nwigle_token=tok12345\n"
+                                "wifi_ssid=Home\ndisplay=st7789-240\nautostart=on\n")
+    assert boot_settings.settings_payload(pairs) == {"settings": {"country": "US", "ble": "off"},
+                                                     "accounts": {"wigle_name": "AID1", "wigle_token": "tok12345"}}
+    me = boot_settings.pwd.getpwuid(os.getuid())
+    assert "2 setting(s) and 2 upload key(s)" in boot_settings.apply_settings(pairs, str(etc), me)
+    assert (etc / "settings").stat().st_mode & 0o777 == 0o600
+    assert json.loads((etc / "settings").read_text())["accounts"]["wigle_token"] == "tok12345"
+    assert boot_settings.apply_status_screen(pairs, str(etc)) == "status screen is oled"
+    assert (etc / "status_screen").read_text() == "oled\n"
+    assert "off" in boot_settings.apply_status_screen({"status_screen": "none"}, str(etc))
+    assert not (etc / "status_screen").exists()
+    assert "not one of" in boot_settings.apply_status_screen({"status_screen": "crt"}, str(etc))
+
+
+def test_the_wifi_profile_is_a_private_networkmanager_keyfile_that_never_logs_the_password(tmp_path):
+    message = boot_settings.apply_wifi({"wifi_ssid": "Café", "wifi_password": "p\\ass;word", "wifi_hidden": "yes"},
+                                       str(tmp_path), reload=False)
+    path = tmp_path / "quartermaster-wifi.nmconnection"
+    text = path.read_text()
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert "ssid=67;97;102;195;169;" in text and "psk=p\\\\ass;word" in text and "hidden=true" in text
+    assert "ass" not in message and "Café" in message
+    for bad in ({"wifi_ssid": "Home", "wifi_password": "short"}, {"wifi_ssid": "x" * 33},
+                {"wifi_ssid": "Home", "wifi_password": "bad\nnewline!"}):
+        before = path.read_text()
+        assert "keeping the current Wi-Fi" in boot_settings.apply_wifi(bad, str(tmp_path), reload=False)
+        assert path.read_text() == before
+    assert boot_settings.apply_wifi({"wifi_ssid": "", "wifi_password": "whatever12"}, str(tmp_path), reload=False) is None
+    boot_settings.apply_wifi({"wifi_ssid": "Open"}, str(tmp_path), reload=False)
+    assert "wifi-security" not in path.read_text()
+
+
+def test_scrub_blanks_only_secret_values_and_a_blank_secret_is_then_ignored(tmp_path):
+    boot = tmp_path / "quartermaster.txt"
+    boot.write_text("# wigle_token=keep this comment\ncountry=US\nwifi_ssid=Home\nwifi_password=hunter2hunter2\n"
+                    "wigle_token = tok12345\nscrub=yes\ndisplay=st7789-240\n")
+    etc, nm = tmp_path / "etc", tmp_path / "nm"
+    etc.mkdir()
+    me = boot_settings.pwd.getpwuid(os.getuid())
+    lines = boot_settings.apply(str(boot), str(etc), str(nm), me, reload=False)
+    assert any("blanked" in line for line in lines) and "hunter2" not in "".join(lines)
+    text = boot.read_text()
+    assert "hunter2" not in text and "tok12345" not in text and "# wigle_token=keep this comment" in text
+    assert "wifi_ssid=Home" in text and text.endswith("display=st7789-240\n")
+    profile = (nm / "quartermaster-wifi.nmconnection").read_text()
+    assert "psk=hunter2hunter2" in profile
+    boot_settings.apply(str(boot), str(etc), str(nm), me, reload=False)  # the next boot must not undo it
+    assert (nm / "quartermaster-wifi.nmconnection").read_text() == profile
+
+
+def test_the_boot_config_script_calls_the_settings_step_and_the_image_installs_it():
+    assert "import boot_settings" in (IMAGE / "boot_config.py").read_text()
+    assert '"$mnt/usr/local/lib/quartermaster-image/boot_settings.py"' in SCRIPT.read_text()

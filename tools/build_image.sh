@@ -294,6 +294,7 @@ log "Configuring the $hat display and autostart"
 printf '%s\n' "$hat" > "$mnt/etc/quartermaster/display"
 sed "s/@HAT@/$hat/" "$here/packaging/image/quartermaster.txt" > "$mnt/boot/firmware/quartermaster.txt"
 install -D -m 644 "$here/packaging/image/boot_config.py" "$mnt/usr/local/lib/quartermaster-image/boot_config.py"
+install -D -m 644 "$here/packaging/image/boot_settings.py" "$mnt/usr/local/lib/quartermaster-image/boot_settings.py"
 install -D -m 644 "$here/packaging/image/quartermaster-boot-config.service" \
     "$mnt/etc/systemd/system/quartermaster-boot-config.service"
 install -D -m 644 "$here/packaging/image/50-quartermaster-wifi-scan.rules" \
