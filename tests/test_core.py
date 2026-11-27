@@ -364,3 +364,30 @@ def test_with_extremes_moving_or_a_sighting_too_weak_to_trust_does_not_hold_back
     heard = [(-60, far), (-90, far), (-62, FIX)]
     why = [t.observe(WIFI, "CC", rssi, NOW + i, fix)[2] for i, (rssi, fix) in enumerate(heard)]
     assert why == ["new", None, "weaker"]
+
+
+def test_boot_settings_win_over_saved_ones_and_bad_keys_are_named_without_their_values(tmp_path):
+    import json
+
+    from quartermaster import accounts, bootconf, config
+
+    cfg_path, acct_path = tmp_path / "config.json", tmp_path / "accounts.json"
+    config.save(dict(config.load(cfg_path), splash=False, country="GB"), cfg_path)
+    accounts.save({"wdgwars_key": "keepkeepkeep"}, acct_path)
+    handed = tmp_path / "settings"
+    handed.write_text(json.dumps({
+        "settings": {"country": "us", "ble": "off", "lora": "maybe", "nonsense": "1", "nodes": "x"},
+        "accounts": {"wigle_name": "AID1234567890", "wigle_token": "supersecrettoken", "wardrift_key": "",
+                     "bogus": "hunter2hunter2"}}))
+    orig_path, orig_acct = config.PATH, accounts.PATH
+    config.PATH, accounts.PATH = cfg_path, acct_path
+    try:
+        applied, problems = bootconf.apply(handed)
+        saved, keys = config.load(cfg_path), accounts.load(acct_path)
+    finally:
+        config.PATH, accounts.PATH = orig_path, orig_acct
+    assert sorted(applied) == ["ble", "country", "wigle_name", "wigle_token"]
+    assert saved["country"] == "US" and saved["ble"] is False and saved["splash"] is False and saved["country_set"]
+    assert keys["wigle_token"] == "supersecrettoken" and keys["wdgwars_key"] == "keepkeepkeep"
+    assert len(problems) == 4 and not any("hunter2" in line or "maybe" in line for line in problems)
+    assert bootconf.apply(tmp_path / "missing")[0] == []

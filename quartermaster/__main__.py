@@ -20,6 +20,7 @@ def main(argv=None):
                         help="show the headless collector's counts on a Waveshare 2.13inch e-Paper HAT (V4)")
     parser.add_argument("--oled", choices=("ssd1309",), default=None,
                         help="show the headless collector's counts on a 128x64 I2C OLED (address 0x3C)")
+    parser.add_argument("--apply-settings", metavar="FILE", help=argparse.SUPPRESS)
     parser.add_argument("--autostart", action="store_true",
                         help="start the wardrive as soon as the LCD UI opens, without a button press")
     parser.add_argument("--no-splash", action="store_true", help="skip the boot animation")
@@ -55,6 +56,14 @@ def main(argv=None):
     headless = display is None
     cardputer = display == "cardputer"
     gps_ports = partial(hardware.gps_candidates, cardputer=cardputer, **({"pi_uart": True} if headless else {}))
+    if args.apply_settings:
+        from . import bootconf
+
+        applied, problems = bootconf.apply(args.apply_settings)
+        for problem in problems:
+            print("quartermaster.txt: %s" % problem, file=sys.stderr)
+        print("quartermaster.txt applied: %s" % (", ".join(applied) or "nothing"))
+        return 0
     if args.configure_uploads:
         return configure_uploads()
     if args.show_config:
