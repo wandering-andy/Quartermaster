@@ -211,6 +211,8 @@ If you wrote the image for the other HAT, you do not need to write the card agai
 
 **Before you flash a card again,** copy three folders to your computer, because flashing erases the card. They are `~/quartermaster/logs` with your saved drives, `~/quartermaster/recon` with your Recon and Drive Alert logs, and `~/quartermaster/aircraft` with your aircraft captures. **Flashing the newest image** under [Good to know](docs/diy.md#good-to-know) in the DIY guide shows how to copy them, also from a card made with an image older than 1.2.9. Your settings and upload keys are erased too, so set them again after flashing.
 
+**Without buttons or a screen (this fork).** Run `quartermaster` with no `--display` for the headless collector, which has no screen or buttons and logs in the background. A Pi with a small LCD and no buttons can start a wardrive by itself: put `autostart=wardrive` in `quartermaster.txt` on the boot partition. [The Pi Zero 2 W guide](docs/raspberry-pi-zero-2w.md) has the wiring, autostart and the 2inch module profile.
+
 To remove the DIY version: `sudo apt remove quartermaster-pi`. Your logs and settings stay where they are.
 
 ## What it does
