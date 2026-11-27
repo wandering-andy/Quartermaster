@@ -92,7 +92,7 @@ def dashboard(status, hat_state):
 
 def run(stop_event, root=DEFAULT_ROOT, cfg=None, gps_factory=GPS, drive_factory=Wardrive,
     hat_factory=lora.WaveshareHat, uploader_factory=uploads.Uploader, output=print, stdout=None, terminal=None,
-    refresh=1.0, plain_interval=15.0, on_started=None):
+    refresh=1.0, plain_interval=15.0, on_started=None, status_sink=None):
     root = Path(root)
     cfg = config.load() if cfg is None else dict(cfg)
     faults.path = root / "errors.log"
@@ -123,6 +123,14 @@ def run(stop_event, root=DEFAULT_ROOT, cfg=None, gps_factory=GPS, drive_factory=
         while not stop_event.is_set():
             status = drive.status()
             status["upload"] = uploader.status()
+            if status_sink is not None:
+                try:
+                    status_sink.update(status, hat.state)
+                except Exception as exc:
+                    # A failing screen must never stop the wardrive.
+                    output("Status display stopped: %s" % exc)
+                    status_sink.close()
+                    status_sink = None
             if terminal:
                 stdout.write("\x1b[H\x1b[2J" + dashboard(status, hat.state) + "\n")
                 stdout.flush()
@@ -132,6 +140,8 @@ def run(stop_event, root=DEFAULT_ROOT, cfg=None, gps_factory=GPS, drive_factory=
             stop_event.wait(refresh)
     finally:
         stop_event.set()
+        if status_sink is not None:
+            status_sink.close()
         try:
             drive.stop()
         finally:

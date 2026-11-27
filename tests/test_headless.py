@@ -1,3 +1,4 @@
+import io
 import threading
 
 from quartermaster import __main__ as cli, accounts, background, config, engine, faults, headless
@@ -322,3 +323,26 @@ def test_configure_uploads_keeps_blank_fields_and_does_not_echo_secrets(tmp_path
     assert cli.configure_uploads() == 0
     assert accounts.load(accounts_path)["wdgwars_key"] == "new-secret"
     assert "new-secret" not in capsys.readouterr().out
+
+def test_status_sink_gets_each_snapshot_and_a_failing_screen_does_not_stop_the_wardrive(tmp_path):
+    class Sink:
+        def __init__(self, fail=False):
+            self.fail, self.calls, self.closed = fail, [], False
+
+        def update(self, status, hat_state):
+            self.calls.append((status, hat_state))
+            stop.set()
+            if self.fail:
+                raise OSError("busy timeout")
+
+        def close(self):
+            self.closed = True
+
+    for fail in (False, True):
+        stop, sink, output = threading.Event(), Sink(fail), []
+        Hat.state = "found"
+        assert headless.run(stop, tmp_path, cfg={"gps_source": "auto"}, gps_factory=GPS, drive_factory=Wardrive,
+                            hat_factory=Hat, uploader_factory=Uploader, output=output.append, status_sink=sink,
+                            stdout=io.StringIO(), terminal=False) == 0
+        assert len(sink.calls) == 1 and sink.closed
+        assert ("Status display stopped: busy timeout" in output) is fail

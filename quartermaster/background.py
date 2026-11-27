@@ -100,7 +100,7 @@ def release_foreground(root, fd):
     os.close(fd)
 
 
-def start(root, output=print, popen=subprocess.Popen):
+def start(root, output=print, popen=subprocess.Popen, extra=()):
     root = Path(root)
     lock_path, pid_path, log_path = _paths(root)
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -126,7 +126,7 @@ def start(root, output=print, popen=subprocess.Popen):
         log_fd = os.open(log_path, os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o600)
         try:
             env = dict(os.environ, **{LOCK_ENV: str(fd), READY_ENV: str(ready_write)})
-            process = popen([sys.executable, "-m", "quartermaster", WORKER_FLAG], stdin=subprocess.DEVNULL,
+            process = popen([sys.executable, "-m", "quartermaster", WORKER_FLAG, *extra], stdin=subprocess.DEVNULL,
                             stdout=log_fd, stderr=subprocess.STDOUT, start_new_session=True, close_fds=True,
                             pass_fds=(fd, ready_write), env=env)
         finally:

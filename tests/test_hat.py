@@ -141,3 +141,55 @@ def test_the_buttonless_module_opens_no_gpio_buttons_and_keeps_the_keyboard(monk
     inputs = hat.HatInput(buttons=False)
     inputs.close()
     keyboard.close.assert_called_once()
+
+
+class FakeEpd:
+    def __init__(self):
+        self.calls = []
+
+    def init(self):
+        self.calls.append("init")
+
+    def Clear(self, colour):
+        self.calls.append("clear")
+
+    def getbuffer(self, img):
+        return img.tobytes()
+
+    def display_Base(self, buffer):
+        self.calls.append("full")
+
+    def displayPartial(self, buffer):
+        self.calls.append("partial")
+
+    def sleep(self):
+        self.calls.append("sleep")
+
+
+def test_epaper_refreshes_partially_only_on_change_and_after_the_interval_with_periodic_full_refreshes():
+    from quartermaster.ui import epaper
+
+    now = [0.0]
+    epd = FakeEpd()
+    panel = epaper.EpaperDisplay(epd, interval=10, full_every=2, full_after=1000, clock=lambda: now[0])
+    shown = []
+    for wifi in (1, 1, 2, 3, 4):
+        now[0] += 11
+        shown.append(panel.show(epaper.render({"wifi": wifi, "state": "running"})))
+        if shown[-1]:
+            now[0] += 1
+            assert not panel.show(epaper.render({"wifi": wifi + 100}))  # inside the interval
+            now[0] -= 1
+    assert shown == [True, False, True, True, True]
+    assert [c for c in epd.calls if c in ("full", "partial")] == ["full", "partial", "partial", "full"]
+    panel.close()
+    assert epd.calls[-1] == "sleep"
+
+
+def test_epaper_frame_is_the_panel_size_and_shows_the_counts():
+    from quartermaster.ui import epaper
+
+    blank = epaper.render({})
+    busy = epaper.render({"wifi": 1234, "ble": 56, "gps": {"valid": True, "hdop": 0.9}, "failed": "No adapter"})
+    assert blank.size == busy.size == epaper.SIZE and blank.mode == "1"
+    assert blank.tobytes() != busy.tobytes()

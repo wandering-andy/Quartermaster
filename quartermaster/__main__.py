@@ -16,6 +16,8 @@ def main(argv=None):
     parser.add_argument("--display", choices=("cardputer", "st7735-128", "st7789-240", "st7789-320x240"), default=None,
                         help="open the CardputerZero framebuffer or a Waveshare LCD HAT with its controls; "
                              "without it, run the headless Linux collector")
+    parser.add_argument("--epaper", choices=("2in13-v4",), default=None,
+                        help="show the headless collector's counts on a Waveshare 2.13inch e-Paper HAT (V4)")
     parser.add_argument("--autostart", action="store_true",
                         help="start the wardrive as soon as the LCD UI opens, without a button press")
     parser.add_argument("--no-splash", action="store_true", help="skip the boot animation")
@@ -44,6 +46,8 @@ def main(argv=None):
         print(__version__)
         return 0
     display = args.display or ("cardputer" if args.cardputer_ui else None)
+    if args.epaper and display:
+        parser.error("--epaper works with the headless collector, not with --display")
     headless = display is None
     cardputer = display == "cardputer"
     gps_ports = partial(hardware.gps_candidates, cardputer=cardputer, **({"pi_uart": True} if headless else {}))
@@ -109,7 +113,7 @@ def main(argv=None):
         for sig in signals:
             signal.signal(sig, stop_worker)
         try:
-            return headless.run(stopped, on_started=background.worker_ready)
+            return headless.run(stopped, on_started=background.worker_ready, **epaper_options(args))
         finally:
             background.finish_worker(DEFAULT_ROOT, lock_fd)
 
@@ -129,14 +133,14 @@ def main(argv=None):
         try:
             for sig in signals:
                 signal.signal(sig, stop)
-            return headless.run(stopped)
+            return headless.run(stopped, **epaper_options(args))
         finally:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
             background.release_foreground(DEFAULT_ROOT, lock_fd)
 
     if headless:
-        return background.start(DEFAULT_ROOT)
+        return background.start(DEFAULT_ROOT, **({"extra": ("--epaper", args.epaper)} if args.epaper else {}))
 
     from . import faults, updates_check, wigle
     from .gnss import GPS
@@ -213,6 +217,20 @@ def configure_uploads():
     ready = accounts.ready(saved)
     print("Upload keys saved securely. %d upload service(s) configured." % len(ready))
     return 0
+
+
+def epaper_options(args):
+    """Keyword arguments for headless.run; empty without --epaper."""
+    if not args.epaper:
+        return {}
+    try:
+        from .ui.epaper import EpaperDisplay, EpaperStatus
+
+        return {"status_sink": EpaperStatus(EpaperDisplay())}
+    except (OSError, ImportError) as exc:
+        # Collecting matters more than the screen, so carry on without it.
+        print("Cannot open the e-Paper display: %s" % exc, file=sys.stderr)
+        return {}
 
 
 def show_config(config_module):

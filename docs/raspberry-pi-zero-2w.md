@@ -112,6 +112,12 @@ This explicitly starts wardriving immediately and at subsequent logins. `systemc
 
 `quartermaster --display st7789-320x240` drives the Waveshare 2inch LCD Module in landscape. Wire it to SPI0: VCC to 3.3 V, GND, DIN to MOSI (pin 19), CLK to SCLK (pin 23), CS to CE0 (pin 24), DC to BCM 25 (pin 22), RST to BCM 27 (pin 13) and BL to BCM 24 (pin 18). It has no buttons, so no GPIO inputs are opened; a USB keyboard still works. The app's wide 320x170 layout is centred on the panel. Waveshare's table puts BL on BCM 18, but the Waveshare SX1262 HAT uses BCM 18 for its reset, so wire BL to BCM 24 (pin 18) instead. On a ready image, set `display=st7789-320x240` in `quartermaster.txt`; combine it with `autostart=wardrive`.
 
+### Waveshare 2.13inch e-Paper HAT (V4, 250x122)
+
+`quartermaster --epaper 2in13-v4` starts the headless collector in the background and shows its counts on the e-Paper: Wi-Fi, Bluetooth, rows, aircraft, mesh, GPS fix, LoRa state and any error. It needs no buttons and is never interactive, so it starts the wardrive by itself. A screen that fails to open or later errors out is reported in `~/quartermaster/background.log` and the wardrive carries on without it.
+
+The panel uses SPI0 CE0 with DC on BCM 25, RST on BCM 17 and BUSY on BCM 24, none of which the SX1262 HAT uses, so the two stack. Install Waveshare's `waveshare_epd` Python library (from their e-Paper repository) and enable SPI. Updates are partial refreshes at most every 10 seconds and only when something changed, with a full refresh every 60 partial ones or hourly to clear ghosting. The panel is put to sleep when the collector stops. This is untested on real hardware.
+
 ### Autostart on an LCD build without buttons
 
 On a card made from a ready Pi image, or one using the `quartermaster-pi` package with the boot-config service, add a line `autostart=wardrive` to `quartermaster.txt` on the **bootfs** drive. At every boot the service creates `/etc/quartermaster/autostart`; the launcher then passes `--autostart`, and the LCD app starts the wardrive without a button press. Remove the line or set `autostart=off` to turn it off. It is off by default. The headless runner always starts collecting and needs no setting.
