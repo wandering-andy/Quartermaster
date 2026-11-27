@@ -122,6 +122,21 @@ The panel uses SPI0 CE0 with DC on BCM 25, RST on BCM 17 and BUSY on BCM 24, non
 
 `quartermaster --oled ssd1309` starts the headless collector in the background and shows the Wi-Fi, Bluetooth and row counts, GPS fix, LoRa state and any error on an I2C OLED at address 0x3C. Wire VCC to 3.3 V, GND, SDA to BCM 2 (pin 3) and SCL to BCM 3 (pin 5); the SX1262 HAT uses none of these. Set the board to I2C mode if it has the resistor jumpers, add `dtparam=i2c_arm=on` to the boot config, install `python3-luma.oled`, and check `i2cdetect -y 1` shows 0x3C. The page redraws once a second, drifts by a pixel every minute and dims after five minutes without a change, to limit burn-in. Use it instead of `--epaper`, not with it. This is untested on real hardware.
 
+### One `quartermaster.txt` for many devices
+
+Besides `display=` and `autostart=`, the image reads these lines from `quartermaster.txt` on the boot partition at every boot. A line that is present wins over the device's own value; a missing or blank line leaves it alone, so one file can be copied to any number of cards.
+
+| Line | Effect |
+| --- | --- |
+| `status_screen=epaper`, `oled` or `none` | Runs the headless collector with the 2.13" e-Paper or the 128x64 OLED instead of the LCD UI |
+| `country=US` | Sets the Wi-Fi regulatory country and the app country |
+| Any other setting, such as `lora=off`, `ble=off`, `gps_source=/dev/serial0`, `adsb=auto`, `auto_upload=on` | Checked against the same choices as `quartermaster --set`; an unknown key or value is logged by name and skipped |
+| `wifi_ssid=`, `wifi_password=`, `wifi_hidden=yes` | Writes a private NetworkManager profile named `quartermaster-wifi` (leave `wifi_password` out for an open network) |
+| `wigle_name=`, `wigle_token=` (or `wigle_encoded=`), `wdgwars_key=`, `wardrift_key=` | Saves the upload keys, as `--configure-uploads` does |
+| `scrub=yes` | After importing, blanks the passwords and keys in the file. A blank secret line is ignored on later boots, so nothing is undone |
+
+The file is plain text on the FAT boot partition, so anyone with the card can read the passwords and keys. Use `scrub=yes` for a card that leaves your hands. Values are never printed to the boot log. The settings are applied when the app next starts, as the service user; the Wi-Fi profile and country are applied by the boot step as root. On another Linux device with NetworkManager, run `sudo python3 -I packaging/image/boot_settings.py /path/to/quartermaster.txt` (for example from a systemd unit at boot) to do the same; the settings land in the `_quartermaster` account unless `/etc/quartermaster/service_user` names another.
+
 ### Autostart on an LCD build without buttons
 
 On a card made from a ready Pi image, or one using the `quartermaster-pi` package with the boot-config service, add a line `autostart=wardrive` to `quartermaster.txt` on the **bootfs** drive. At every boot the service creates `/etc/quartermaster/autostart`; the launcher then passes `--autostart`, and the LCD app starts the wardrive without a button press. Remove the line or set `autostart=off` to turn it off. It is off by default. The headless runner always starts collecting and needs no setting.

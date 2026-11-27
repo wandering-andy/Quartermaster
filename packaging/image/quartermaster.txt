@@ -6,6 +6,14 @@
 #
 # To start the wardrive by itself when the Pi boots, add a line:  autostart=wardrive
 #
+# More lines (one per line, key=value, the file wins at every boot; leave a line out to keep the device's own value):
+#   status_screen=epaper     2.13 inch e-Paper HAT, or oled for a 128x64 I2C OLED, or none (no buttons, no LCD)
+#   country=US               Wi-Fi and LoRa country, also lora=, gps_source=, adsb=, ble=, auto_upload= ...
+#   wifi_ssid=MyNetwork      Wi-Fi network; add wifi_password= (and wifi_hidden=yes for a hidden network)
+#   wigle_name= wigle_token= wdgwars_key= wardrift_key=     upload keys
+#   scrub=yes                blank the passwords and keys in this file after they are imported
+# Passwords and keys are plain text on this card. Anyone who has the card can read them unless scrub=yes is used.
+#
 # Put the name of your HAT after display= on the last line.
 # Then save this file and put the card back in the Pi.
 display=@HAT@

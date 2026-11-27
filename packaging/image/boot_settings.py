@@ -178,3 +178,10 @@ def apply(boot_file=BOOT_FILE, etc=ETC, nm_dir=NM_DIR, user=None, reload=True):
             os.fsync(handle.fileno())
         messages.append("secret values blanked in %s" % boot_file)
     return [line for line in messages if line]
+
+
+if __name__ == "__main__":
+    import sys
+
+    for message in apply(sys.argv[1] if len(sys.argv) > 1 else BOOT_FILE):
+        print(message)

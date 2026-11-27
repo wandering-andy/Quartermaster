@@ -110,6 +110,12 @@ def test_pi_installer_contains_both_profiles_and_an_unprivileged_launcher(tmp_pa
     assert launcher.stat().st_mode & 0o111
     assert 'quartermaster --display "$display" "$@"' in launcher.read_text()
     assert "[ -e /etc/quartermaster/autostart ]" in launcher.read_text()
+    text = launcher.read_text()
+    assert subprocess.run(["sh", "-n", str(launcher)]).returncode == 0
+    assert "--apply-settings /etc/quartermaster/settings" in text
+    assert "--headless-wardrive --epaper 2in13-v4" in text and "--headless-wardrive --oled ssd1309" in text
+    # Settings and the status screen apply only to the bare service start, not to --stop or --status.
+    assert text.index('if [ "$#" -eq 0 ]') < text.index("--apply-settings") < text.index("--display")
     assert (stage / "etc/quartermaster/display").read_text().strip() == "st7735-128"
     assert (stage / "DEBIAN/conffiles").read_text().strip() == "/etc/quartermaster/display"
     assert (stage / "usr/lib/quartermaster/app/quartermaster/ui/hat.py").is_file()

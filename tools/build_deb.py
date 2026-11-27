@@ -59,8 +59,20 @@ def pi_layout(stage):
     launcher = stage / "usr/bin/quartermaster"
     launcher.parent.mkdir(parents=True)
     launcher.write_text('#!/bin/sh\nset -e\nIFS= read -r display < /etc/quartermaster/display\n'
+                        'cd /usr/lib/quartermaster/app\n'
+                        'if [ "$#" -eq 0 ]; then\n'
+                        '  [ ! -r /etc/quartermaster/settings ] || /usr/bin/python3 -m quartermaster '
+                        '--apply-settings /etc/quartermaster/settings || true\n'
+                        '  if [ -r /etc/quartermaster/status_screen ]; then\n'
+                        '    IFS= read -r screen < /etc/quartermaster/status_screen\n'
+                        '    case $screen in\n'
+                        '      epaper) exec /usr/bin/python3 -m quartermaster --headless-wardrive --epaper 2in13-v4 ;;\n'
+                        '      oled) exec /usr/bin/python3 -m quartermaster --headless-wardrive --oled ssd1309 ;;\n'
+                        '    esac\n'
+                        '  fi\n'
+                        'fi\n'
                         'if [ -e /etc/quartermaster/autostart ]; then set -- --autostart "$@"; fi\n'
-                        'cd /usr/lib/quartermaster/app\nexec /usr/bin/python3 -m quartermaster --display "$display" "$@"\n')
+                        'exec /usr/bin/python3 -m quartermaster --display "$display" "$@"\n')
     launcher.chmod(0o755)
     profile = stage / "etc/quartermaster/display"
     profile.parent.mkdir(parents=True)
