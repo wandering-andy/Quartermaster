@@ -16,12 +16,12 @@ BUTTONS = {6: "UP", 19: "DOWN", 5: "LEFT", 26: "RIGHT", 13: "ENTER",
            21: "ENTER", 20: "ESC", 16: "TAB"}
 
 
-# The 2-inch module has no buttons and its backlight is on BCM 18; the HATs use BCM 24.
-# Waveshare 2inch module: uses SPI0 CE0 and BCM 18, so it cannot be stacked with the Waveshare SX1262 LoRa HAT (same pins).
+# The 2-inch module has no buttons. Its backlight is wired to BCM 24 like the HATs, not the BCM 18 that Waveshare's
+# table names, because the Waveshare SX1262 LoRa HAT uses BCM 18 for its reset.
 WIDE = "st7789-320x240"
 PROFILES = ("st7735-128", "st7789-240", WIDE)
 WIDE_SIZE = (320, 240)
-BACKLIGHT = {"st7735-128": 24, "st7789-240": 24, WIDE: 18}
+BACKLIGHT = {"st7735-128": 24, "st7789-240": 24, WIDE: 24}
 
 
 class HatDisplay:

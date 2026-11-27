@@ -110,7 +110,7 @@ This explicitly starts wardriving immediately and at subsequent logins. `systemc
 
 ### 2-inch ST7789 SPI module (240x320, no buttons)
 
-`quartermaster --display st7789-320x240` drives the Waveshare 2inch LCD Module in landscape. Wire it to SPI0: VCC to 3.3 V, GND, DIN to MOSI (pin 19), CLK to SCLK (pin 23), CS to CE0 (pin 24), DC to BCM 25 (pin 22), RST to BCM 27 (pin 13) and BL to BCM 18 (pin 12). It has no buttons, so no GPIO inputs are opened; a USB keyboard still works. The app's wide 320x170 layout is centred on the panel. The module uses SPI0 CE0 and BCM 18, so it cannot be combined with the Waveshare SX1262 HAT, which uses the same lines. On a ready image, set `display=st7789-320x240` in `quartermaster.txt`; combine it with `autostart=wardrive`.
+`quartermaster --display st7789-320x240` drives the Waveshare 2inch LCD Module in landscape. Wire it to SPI0: VCC to 3.3 V, GND, DIN to MOSI (pin 19), CLK to SCLK (pin 23), CS to CE0 (pin 24), DC to BCM 25 (pin 22), RST to BCM 27 (pin 13) and BL to BCM 24 (pin 18). It has no buttons, so no GPIO inputs are opened; a USB keyboard still works. The app's wide 320x170 layout is centred on the panel. Waveshare's table puts BL on BCM 18, but the Waveshare SX1262 HAT uses BCM 18 for its reset, so wire BL to BCM 24 (pin 18) instead. On a ready image, set `display=st7789-320x240` in `quartermaster.txt`; combine it with `autostart=wardrive`.
 
 ### Autostart on an LCD build without buttons
 
